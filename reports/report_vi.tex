@@ -1,0 +1,458 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setdefaultlanguage{vietnamese}
+\setmainfont{Times New Roman}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{float}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    pdftitle={Bao cao do an he thong RAG tieng Viet cho du lieu VNU},
+    pdfauthor={Sinh vien}
+}
+
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{teal},
+    stringstyle=\color{red!70!black},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single
+}
+
+\onehalfspacing
+
+\title{\textbf{BÁO CÁO ĐỒ ÁN}\\
+Xây dựng hệ thống hỏi đáp tiếng Việt theo kiến trúc RAG\\
+cho dữ liệu Đại học Quốc gia Hà Nội}
+\author{
+    Họ và tên: \dotfill \\
+    Mã sinh viên: \dotfill \\
+    Lớp: \dotfill
+}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Giới thiệu}
+
+Trong bối cảnh lượng thông tin học thuật, tuyển sinh, đào tạo và truyền thông của Đại học Quốc gia Hà Nội (VNU) ngày càng lớn, việc tra cứu thủ công trên nhiều website và nhiều định dạng tài liệu khác nhau gây tốn thời gian và khó đảm bảo tính nhất quán. Bài toán đặt ra là xây dựng một hệ thống hỏi đáp tiếng Việt có khả năng truy xuất thông tin từ tập tài liệu lớn, sau đó sinh ra câu trả lời ngắn gọn, bám sát nguồn tri thức.
+
+Đồ án này triển khai một hệ thống \textit{Retrieval-Augmented Generation} (RAG) cho dữ liệu VNU và các đơn vị thành viên. Hệ thống kết hợp ba thành phần chính: tiền xử lý và phân mảnh tài liệu theo ngữ nghĩa, truy hồi lai giữa vector search và BM25, và mô hình ngôn ngữ lớn để sinh đáp án cuối cùng. Mục tiêu của hệ thống là nhận câu hỏi tiếng Việt, tìm ra các đoạn văn liên quan nhất trong tập dữ liệu, sau đó tạo ra câu trả lời ngắn, trực tiếp và có khả năng mở rộng cho các truy vấn thực tế.
+
+\section{Mục tiêu và phạm vi}
+
+\subsection{Mục tiêu}
+
+Mục tiêu chính của project gồm các nội dung sau:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Xây dựng pipeline RAG hoàn chỉnh cho dữ liệu giáo dục tiếng Việt.
+    \item Khai thác tập dữ liệu lớn liên quan đến VNU và các trường thành viên dưới định dạng JSON.
+    \item Kết hợp semantic chunking, vector retrieval, BM25 và reranking để nâng cao chất lượng truy hồi.
+    \item Sinh câu trả lời ngắn gọn bằng mô hình ngôn ngữ lớn Qwen.
+\end{itemize}
+
+\subsection{Phạm vi}
+
+Phạm vi triển khai trong repo hiện tại tập trung vào:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Nạp và chuẩn hóa dữ liệu từ các file JSON đã crawl sẵn.
+    \item Phân đoạn tài liệu theo câu và độ tương đồng embedding.
+    \item Xây dựng cơ sở dữ liệu vector bằng Chroma.
+    \item Xây dựng chỉ mục từ khóa BM25 trên cùng tập tài liệu.
+    \item Hợp nhất kết quả truy hồi bằng Reciprocal Rank Fusion (RRF).
+    \item Tùy chọn reranking trước khi sinh câu trả lời.
+    \item Chạy hệ thống từ dòng lệnh và lưu kết quả trả lời ra file text.
+\end{itemize}
+
+Repo hiện tại chưa cung cấp đầy đủ một framework đánh giá định lượng hoàn chỉnh, cũng chưa bao gồm rõ ràng toàn bộ crawler và pipeline PDF như mô tả trong README mẫu. Do đó, báo cáo này bám sát những gì đã được triển khai thực tế trong mã nguồn.
+
+\section{Tổng quan dữ liệu}
+
+\subsection{Nguồn dữ liệu}
+
+Theo mô tả trong thư mục \texttt{data/documents}, dữ liệu được xây dựng từ nhiều nguồn liên quan đến VNU và các trường thành viên như:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Trang chủ VNU và các trang tin tức trực thuộc.
+    \item Trường Đại học Khoa học Tự nhiên.
+    \item Trường Đại học Kinh tế.
+    \item Trường Đại học Ngoại ngữ.
+    \item Trường Đại học Y Dược.
+    \item Trường Đại học Luật.
+    \item Trường Đại học Khoa học Xã hội và Nhân văn.
+    \item Một số nguồn khác như Nhà xuất bản Đại học Quốc gia Hà Nội và các chuyên trang giáo dục.
+\end{itemize}
+
+Dữ liệu trong repo được lưu dưới dạng JSON với cấu trúc chung:
+
+\begin{lstlisting}[style=pythonstyle]
+{
+    "_id": {...},
+    "url": "...",
+    "title": "...",
+    "content": "...",
+    "domain": "...",
+    "category": [...],
+    "create_at": {...}
+}
+\end{lstlisting}
+
+\subsection{Quy mô dữ liệu}
+
+Qua kiểm tra trực tiếp thư mục \texttt{data/documents}, tập dữ liệu hiện có quy mô như Bảng~\ref{tab:dataset-size}.
+
+\begin{table}[H]
+\centering
+\caption{Số lượng record theo từng file dữ liệu}
+\label{tab:dataset-size}
+\begin{tabular}{lr}
+\toprule
+\textbf{Tên file} & \textbf{Số record} \\
+\midrule
+\texttt{education.json} & 1555 \\
+\texttt{hus.json} & 4982 \\
+\texttt{is.edu.json} & 1644 \\
+\texttt{news.vnu.json} & 6847 \\
+\texttt{press.edu.json} & 573 \\
+\texttt{ueb.edu.json} & 4052 \\
+\texttt{ul.json} & 200 \\
+\texttt{ulis.json} & 200 \\
+\texttt{ump.json} & 200 \\
+\texttt{ussh.json} & 200 \\
+\texttt{vnu.json} & 200 \\
+\midrule
+\textbf{Tổng cộng} & \textbf{16653} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Đây là một tập dữ liệu đủ lớn để đánh giá tính hiệu quả của truy hồi lai và mô hình sinh đáp án trên miền thông tin giáo dục tiếng Việt.
+
+\subsection{Dữ liệu câu hỏi đáp}
+
+Repo hiện có hai tập câu hỏi đáp trong thư mục \texttt{data/QA}:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Tập \texttt{train}: 235 câu hỏi, 235 đáp án tham chiếu, 235 câu trả lời hệ thống.
+    \item Tập \texttt{test}: 311 câu hỏi, 311 đáp án tham chiếu, 311 câu trả lời hệ thống.
+\end{itemize}
+
+Các câu hỏi tập trung mạnh vào việc truy xuất thông tin thực thể, mốc thời gian, tên đơn vị, chương trình đào tạo, văn bản quản lý và số liệu cụ thể. Đây là dạng câu hỏi phù hợp với kiến trúc RAG vì câu trả lời thường nằm rải rác trong tài liệu nguồn và cần truy hồi đúng ngữ cảnh trước khi sinh đáp án.
+
+\section{Kiến trúc hệ thống}
+
+\subsection{Tổng quan pipeline}
+
+Pipeline của hệ thống có thể mô tả ngắn gọn như sau:
+
+\begin{center}
+\texttt{JSON documents} $\rightarrow$
+\texttt{document loader} $\rightarrow$
+\texttt{semantic chunking} $\rightarrow$
+\texttt{embedding + Chroma} $\parallel$
+\texttt{BM25} $\rightarrow$
+\texttt{hybrid retrieval (RRF)} $\rightarrow$
+\texttt{optional reranking} $\rightarrow$
+\texttt{LLM generation}
+\end{center}
+
+Entry point chính của hệ thống là file \texttt{src/run\_system.py}. File này đảm nhiệm việc nạp dữ liệu, thực hiện chunking nếu cần, xây dựng hoặc nạp lại vector store, tạo retriever, nạp mô hình LLM và cuối cùng trả lời câu hỏi.
+
+\subsection{Các thành phần chính}
+
+\subsubsection{Nạp và chuẩn hóa dữ liệu}
+
+Module \texttt{src/prepocessing/document\_loader.py} chịu trách nhiệm:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Chuẩn hóa khoảng trắng trong nội dung và metadata.
+    \item Trích xuất \texttt{doc\_id}, \texttt{url}, \texttt{title}, \texttt{domain}, \texttt{category}, \texttt{created\_at}.
+    \item Hỗ trợ đọc file JSON theo nhiều kiểu: một object, list object, hoặc chuỗi nhiều JSON object nối tiếp nhau.
+    \item Chuyển từng record thành đối tượng \texttt{Document} của LangChain.
+\end{itemize}
+
+Thiết kế này giúp pipeline có khả năng chịu lỗi dữ liệu đầu vào khá tốt, đặc biệt khi dữ liệu crawl có thể không đồng nhất về định dạng.
+
+\subsubsection{Phân mảnh tài liệu theo ngữ nghĩa}
+
+Module \texttt{src/prepocessing/chunking.py} triển khai lớp \texttt{SemanticChunker}. Thay vì chia tài liệu theo số ký tự cố định, hệ thống:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Tách câu bằng \texttt{underthesea.sent\_tokenize}.
+    \item Sinh embedding cho từng câu.
+    \item Tính cosine similarity giữa các câu liên tiếp.
+    \item Tạo ranh giới chunk khi độ tương đồng giảm xuống dưới ngưỡng hoặc khi chunk vượt quá kích thước tối đa.
+    \item Gộp các chunk quá ngắn và thêm overlap giữa các chunk liên tiếp.
+\end{itemize}
+
+Các tham số quan trọng:
+\begin{itemize}[leftmargin=1.5cm]
+    \item \texttt{min\_chunk\_size = 250}
+    \item \texttt{max\_chunk\_size = 1000}
+    \item \texttt{overlap\_size = 100}
+    \item \texttt{threshold = 0.5} trong file YAML
+    \item \texttt{THRESHOLD = 0.65} trong \texttt{run\_system.py}
+\end{itemize}
+
+Điểm đáng chú ý là ngưỡng chunking đang tồn tại ở hai nơi với hai giá trị khác nhau. Trong thực thi end-to-end qua \texttt{run\_system.py}, giá trị \texttt{0.65} sẽ được truyền trực tiếp vào chunker. Đây là chi tiết cần ghi rõ trong báo cáo vì nó ảnh hưởng đến việc tái lập kết quả.
+
+\subsubsection{Embedding và vector database}
+
+Module \texttt{src/model/model\_embedding.py} sử dụng mô hình \texttt{AITeamVN/Vietnamese\_Embedding} thông qua \texttt{HuggingFaceEmbeddings}. Mô hình được cấu hình với:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Tự động chọn \texttt{cuda} nếu khả dụng, ngược lại dùng \texttt{cpu}.
+    \item Chuẩn hóa embedding bằng \texttt{normalize\_embeddings=True}.
+\end{itemize}
+
+Module \texttt{src/retrieval/vectorDB.py} xây dựng:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Chỉ mục vector trong Chroma.
+    \item Chỉ mục từ khóa BM25 trên cùng tập tài liệu.
+\end{itemize}
+
+Việc lưu trữ vector được persist tại thư mục \texttt{data/vector\_db}, cho phép tái sử dụng chỉ mục ở các lần chạy sau mà không cần embedding lại toàn bộ dữ liệu.
+
+\subsubsection{Hybrid retrieval}
+
+Module \texttt{src/retrieval/hybird\_retrieval.py} triển khai lớp \texttt{HybridRetriever}. Retriever này thực hiện:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Truy hồi top-\(k\) từ Chroma bằng vector similarity.
+    \item Truy hồi top-\(k\) từ BM25 bằng từ khóa đã tokenize.
+    \item Hợp nhất hai danh sách kết quả bằng Reciprocal Rank Fusion (RRF).
+\end{itemize}
+
+Trong repo, các tham số mặc định được dùng ở entry point là:
+\begin{itemize}[leftmargin=1.5cm]
+    \item \(k = 3\)
+    \item \texttt{rrf\_k = 60}
+\end{itemize}
+
+Lựa chọn hybrid retrieval là hợp lý với dữ liệu giáo dục tiếng Việt vì:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Vector retrieval mạnh khi câu hỏi diễn đạt khác với văn bản gốc nhưng cùng ngữ nghĩa.
+    \item BM25 mạnh khi câu hỏi chứa tên riêng, mã hiệu văn bản, ngày tháng, hoặc cụm từ chính xác.
+    \item RRF giúp giảm phụ thuộc vào một kênh truy hồi duy nhất.
+\end{itemize}
+
+\subsubsection{Reranking và sinh câu trả lời}
+
+Module \texttt{src/query/re-ranking.py} gồm hai phần quan trọng:
+\begin{itemize}[leftmargin=1.5cm]
+    \item \texttt{CrossEncoderReranker}: dùng chính mô hình ngôn ngữ để đánh giá mức liên quan giữa cặp \textit{query - document}.
+    \item \texttt{BatchRAG}: gom ngữ cảnh, dựng prompt và gọi mô hình sinh đáp án.
+\end{itemize}
+
+Mô hình ngôn ngữ được nạp từ \texttt{src/model/model\_llm.py} với model chính là:
+\begin{center}
+\texttt{Qwen/Qwen2.5-7B-Instruct}
+\end{center}
+
+Trong lớp \texttt{ChatLLM}, prompt được chuyển sang định dạng chat template của mô hình. Hệ thống cấu hình:
+\begin{itemize}[leftmargin=1.5cm]
+    \item \texttt{max\_input\_tokens = 3072}
+    \item \texttt{max\_new\_tokens = 128}
+    \item \texttt{do\_sample = False}
+    \item \texttt{temperature = 0.0}
+\end{itemize}
+
+Điều này cho thấy hệ thống ưu tiên tính ổn định và khả năng tái lập hơn là tính sáng tạo trong sinh văn bản.
+
+\section{Luồng thực thi của chương trình}
+
+Người dùng chạy hệ thống qua file \texttt{src/run\_system.py}. Một số tùy chọn chính:
+\begin{itemize}[leftmargin=1.5cm]
+    \item \texttt{--documents-dir}: thư mục chứa dữ liệu JSON.
+    \item \texttt{--question}: cung cấp trực tiếp câu hỏi.
+    \item \texttt{--question-file}: file chứa danh sách câu hỏi.
+    \item \texttt{--build-index-only}: chỉ xây dựng chỉ mục, chưa chạy sinh đáp án.
+    \item \texttt{--no-chunking}: tắt semantic chunking.
+    \item \texttt{--use-reranker}: bật reranking.
+    \item \texttt{--rebuild-index}: xóa và xây lại toàn bộ vector store.
+    \item \texttt{--output}: lưu câu trả lời ra file text.
+\end{itemize}
+
+Ví dụ cách gọi:
+
+\begin{lstlisting}[style=pythonstyle]
+python src/run_system.py ^
+  --documents-dir data/documents ^
+  --question-file data/QA/test/questions.txt ^
+  --output data/QA/test/system_output.txt
+\end{lstlisting}
+
+Thiết kế này thuận tiện cho việc thử nhiều cấu hình khác nhau và cho phép tách riêng bước build index với bước suy luận.
+
+\section{Đánh giá định tính trên đầu ra hiện có}
+
+\subsection{Dữ liệu đánh giá}
+
+Repo hiện có file kết quả hệ thống:
+\begin{itemize}[leftmargin=1.5cm]
+    \item \texttt{data/QA/train/system\_output.txt}
+    \item \texttt{data/QA/test/system\_output.txt}
+\end{itemize}
+
+Điều này cho thấy hệ thống đã được chạy thực tế trên ít nhất hai tập dữ liệu. Tuy nhiên repo chưa cung cấp script tính metric như Exact Match, F1 hay semantic similarity score, nên báo cáo hiện tại chủ yếu đánh giá định tính dựa trên kết quả mẫu.
+
+\subsection{Ví dụ so sánh}
+
+Bảng~\ref{tab:qualitative} trình bày một số ví dụ đầu tiên trong tập test.
+
+\begin{table}[H]
+\centering
+\caption{Một số ví dụ so sánh đáp án tham chiếu và đáp án hệ thống}
+\label{tab:qualitative}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{0.42\textwidth} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Câu hỏi} & \textbf{Đáp án tham chiếu} & \textbf{Đáp án hệ thống} \\
+\midrule
+Chương trình đào tạo chuẩn quốc tế ngành Vật lý của Trường ĐHKHTN liên kết với trường đại học nào của Hoa Kỳ? &
+Đại học Brown; The Brown University &
+Trường Đại học Brown \\
+\midrule
+Trưởng nhóm nghiên cứu mạnh về lĩnh vực Topo đại số tại Trường ĐHKHTN là nhà khoa học nào? &
+GS.TSKH. Nguyễn Hữu Việt Hưng &
+GS.TSKH. \\
+\midrule
+Trưởng nhóm nghiên cứu mạnh về lĩnh vực Sóng trong môi trường đàn hồi tại Trường ĐHKHTN là ai? &
+GS.TS. Phạm Chí Vĩnh &
+GS.TS. \\
+\midrule
+Trường ĐHKHTN bố trí cho sinh viên nội trú tại Ký túc xá Mễ Trì, Pháp Vân - Tứ Hiệp và khu ký túc xá nào khác? &
+Ký túc xá Mỹ Đình &
+Ký túc xá Mỹ Đình \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Nhận xét}
+
+Từ ví dụ trên có thể rút ra một số nhận xét:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Hệ thống có khả năng truy hồi đúng thực thể đích trong nhiều trường hợp. Ví dụ câu hỏi về Đại học Brown và Ký túc xá Mỹ Đình đều cho câu trả lời hợp lý.
+    \item Với một số câu hỏi về nhân danh, đầu ra bị rút gọn quá mức, chỉ còn học hàm như ``GS.TS.'' hoặc ``GS.TSKH.'' thay vì tên đầy đủ.
+    \item Nguyên nhân nhiều khả năng đến từ \texttt{FocusedAnswerParser}, vì parser hiện đang lấy câu đầu tiên ngắn gọn và loại bỏ phần sau theo một số marker hoặc heuristic cắt chuỗi.
+    \item Chất lượng trả lời vì vậy phụ thuộc không chỉ vào retrieval mà còn vào bước hậu xử lý output.
+\end{itemize}
+
+\section{Phân tích ưu điểm của hệ thống}
+
+\subsection{Phù hợp với dữ liệu tiếng Việt miền giáo dục}
+
+Việc dùng mô hình embedding tiếng Việt giúp biểu diễn tốt hơn các câu truy vấn và văn bản trong miền giáo dục, hành chính và học thuật. Đây là lợi thế rõ rệt so với các mô hình embedding đa ngôn ngữ chung.
+
+\subsection{Kết hợp truy hồi ngữ nghĩa và từ khóa}
+
+Hybrid retrieval cho phép khai thác cả hai loại tín hiệu:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Tín hiệu ngữ nghĩa từ vector embedding.
+    \item Tín hiệu khớp chính xác từ BM25.
+\end{itemize}
+
+Điều này đặc biệt quan trọng với các câu hỏi chứa:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Mã hiệu văn bản.
+    \item Tên riêng.
+    \item Ngày tháng.
+    \item Các con số hoặc thông tin tuyển sinh.
+\end{itemize}
+
+\subsection{Chunking theo ngữ nghĩa thay vì chia cứng}
+
+Semantic chunking giúp ngữ cảnh truy hồi mạch lạc hơn. Nếu chia cứng theo số ký tự, thông tin cần thiết có thể bị cắt ngang giữa hai chunk và làm giảm chất lượng truy hồi. Giải pháp hiện tại tuy chưa hoàn hảo nhưng hợp lý hơn nhiều so với fixed-size chunking cơ bản.
+
+\subsection{Khả năng tái sử dụng chỉ mục}
+
+Việc persist vector database vào thư mục \texttt{data/vector\_db} giúp tiết kiệm thời gian xử lý ở các lần chạy tiếp theo. Đây là một điểm cộng thực dụng khi làm việc với dữ liệu lớn và embedding model tương đối nặng.
+
+\section{Hạn chế và vấn đề tồn tại}
+
+\subsection{Chưa có framework đánh giá định lượng đầy đủ}
+
+Repo chưa có module riêng để tính các độ đo như:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Exact Match
+    \item F1 token overlap
+    \item Semantic similarity giữa đáp án hệ thống và đáp án tham chiếu
+    \item Retrieval recall hoặc top-\(k\) hit rate
+\end{itemize}
+
+Do đó, việc chứng minh mức cải thiện của từng thành phần như chunking, hybrid retrieval hay reranker vẫn còn hạn chế.
+
+\subsection{Parser có thể làm mất thông tin}
+
+Điểm yếu dễ thấy nhất từ file đầu ra là parser rút gọn câu trả lời quá mức trong một số trường hợp. Nếu truy hồi đúng nhưng parser cắt mất tên riêng, hệ thống vẫn cho ra kết quả sai ở mức bề mặt. Đây là lỗi hậu xử lý rất đáng ưu tiên sửa.
+
+\subsection{Reranker đang dùng mô hình quá nặng}
+
+Lớp \texttt{CrossEncoderReranker} đang sử dụng trực tiếp mô hình \texttt{Qwen/Qwen2.5-7B-Instruct} để chấm relevance yes/no. Cách làm này có thể hiệu quả nhưng tiêu tốn tài nguyên lớn, đặc biệt khi số lượng candidate document tăng lên. Trong thực tế, một cross-encoder nhẹ hơn có thể đem lại cân bằng tốt hơn giữa chất lượng và tốc độ.
+
+\subsection{Thiếu đồng bộ giữa README và repo thực tế}
+
+README mô tả một cấu trúc project lớn hơn so với những gì repo hiện đang chứa. Ví dụ:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Có nhắc đến nhiều thư mục \texttt{configs}, \texttt{crawl}, \texttt{evaluation}, \texttt{reports}, \texttt{submission} nhưng không hiện diện đầy đủ.
+    \item Tên thư mục \texttt{prepocessing} và file \texttt{hybird\_retrieval.py} bị sai chính tả.
+    \item Có cấu hình chunking trong YAML nhưng entry point lại ghi đè tham số bằng constant riêng.
+\end{itemize}
+
+Những điểm này không làm hệ thống không chạy được, nhưng gây khó khăn cho việc bảo trì và tái lập thí nghiệm.
+
+\section{Đề xuất hướng cải tiến}
+
+Từ hiện trạng của repo, có thể đề xuất một số hướng cải tiến như sau:
+\begin{itemize}[leftmargin=1.5cm]
+    \item Tách toàn bộ tham số hệ thống ra file cấu hình thống nhất, tránh hard-code trong \texttt{run\_system.py}.
+    \item Viết script đánh giá định lượng trên tập \texttt{train} và \texttt{test}.
+    \item Sửa \texttt{FocusedAnswerParser} để giữ nguyên thực thể đầy đủ, đặc biệt với tên người và tên đơn vị.
+    \item Bổ sung cơ chế trích dẫn nguồn hoặc metadata của chunk được dùng khi trả lời.
+    \item Thử nghiệm các reranker chuyên dụng nhẹ hơn, thay vì dùng trực tiếp cùng một LLM cho cả rerank và generation.
+    \item Đồng bộ lại README với mã nguồn thực tế để báo cáo và triển khai sau này rõ ràng hơn.
+\end{itemize}
+
+\section{Kết luận}
+
+Project đã xây dựng được một hệ thống RAG tiếng Việt tương đối hoàn chỉnh cho miền dữ liệu giáo dục của VNU. Điểm mạnh nổi bật của hệ thống là sử dụng semantic chunking kết hợp hybrid retrieval giữa Chroma và BM25, từ đó tạo nền tảng tốt cho bước sinh đáp án bằng mô hình ngôn ngữ lớn. Trên dữ liệu thực tế, hệ thống đã thể hiện khả năng truy hồi đúng thông tin ở nhiều câu hỏi thực thể và câu hỏi factoid.
+
+Tuy nhiên, hệ thống vẫn còn những hạn chế đáng kể ở khâu đánh giá và hậu xử lý câu trả lời. Việc thiếu metric định lượng và hiện tượng parser cắt cụt tên riêng cho thấy chất lượng end-to-end vẫn có thể được cải thiện đáng kể mà chưa cần thay đổi toàn bộ kiến trúc. Nhìn chung, đây là một nền tảng tốt cho một đồ án học phần về NLP ứng dụng, đồng thời cũng là điểm xuất phát hợp lý cho các cải tiến tiếp theo theo hướng thực nghiệm bài bản hơn.
+
+\section*{Phụ lục: Tóm tắt thông số hệ thống}
+
+\begin{longtable}{p{0.35\textwidth} p{0.55\textwidth}}
+\toprule
+\textbf{Thành phần} & \textbf{Cấu hình hiện tại} \\
+\midrule
+Mô hình embedding & \texttt{AITeamVN/Vietnamese\_Embedding} \\
+Mô hình sinh đáp án & \texttt{Qwen/Qwen2.5-7B-Instruct} \\
+Ngưỡng chunking trong YAML & \texttt{0.5} \\
+Ngưỡng chunking trong entry point & \texttt{0.65} \\
+Kích thước chunk tối thiểu & \texttt{250} ký tự \\
+Kích thước chunk tối đa & \texttt{1000} ký tự \\
+Overlap giữa các chunk & \texttt{100} ký tự \\
+Top-\(k\) retrieval & \texttt{3} \\
+RRF \(k\) & \texttt{60} \\
+Giới hạn input cho LLM & \texttt{3072} token \\
+Giới hạn context cho prompt & \texttt{4000} ký tự \\
+Batch size generation & \texttt{2} \\
+\bottomrule
+\end{longtable}
+
+\end{document}

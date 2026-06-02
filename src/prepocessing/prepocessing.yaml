@@ -1,0 +1,5 @@
+threshold : 0.5
+min_chunk_size : 250
+max_chunk_size : 1000
+overlap_size : 100
+
