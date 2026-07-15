@@ -61,11 +61,6 @@ Repo đã có sẵn dữ liệu tri thức trong `data/documents/` và dữ li�
 python src/run_system.py --build-index-only --rebuild-index
 ```
 
-Lệnh này sẽ:
-
-- Nạp dữ liệu từ `data/documents`
-- Chunk tài liệu nếu bật chunking
-- Tạo lại Chroma DB trong `data/vector_db`
 
 ### 4.2. Chạy RAG trên tập test
 
@@ -87,20 +82,7 @@ python src/run_system.py ^
 ```
 
 
-
-## 5. Các file quan trọng
-
-- `src/run_system.py`: entry point chính của hệ RAG
-- `src/crawl/crawl.py`: crawler HTML
-- `src/prepocessing/document_loader.py`: nạp và chuẩn hóa tài liệu
-- `src/prepocessing/chunking.py`: semantic chunking
-- `src/retrieval/vectorDB.py`: Chroma + BM25
-- `src/retrieval/hybird_retrieval.py`: hybrid retrieval bằng RRF
-- `src/query/re-ranking.py`: reranking và BatchRAG
-- `src/model/model_llm.py`: load LLM
-- `src/model/model_embedding.py`: load embedding model
-
-## 6. Mô hình đang dùng
+## 5. Mô hình đang dùng
 
 - Embedding model: `AITeamVN/Vietnamese_Embedding`
 - LLM: `Qwen/Qwen2.5-7B-Instruct`
